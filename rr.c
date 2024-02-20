@@ -23,10 +23,6 @@ struct process
 
   /* Additional fields here */
 
-  //prob dont need order b/c maintained in data list.txt
-  //u32 order;
-
-  //value is what is adjusted
   u32 temp_burst_time;
   bool started;
   /* End of "Additional fields here" */
@@ -181,16 +177,12 @@ void init_processes(const char *path,
     (*process_data)[i].pid = next_int(&data, data_end);
     (*process_data)[i].arrival_time = next_int(&data, data_end);
     (*process_data)[i].burst_time = next_int(&data, data_end);
-    //initial order
-    //(*process_data)[i].order = i;
-
     //temp burst time
     (*process_data)[i].temp_burst_time = (*process_data)[i].burst_time;
     //determines start time for response time
     (*process_data)[i].started = false;
   }
 
-  //unmaps memory region using 'munmap'/ closes file
   munmap((void *)data, size);
   close(fd);
 }
@@ -199,36 +191,28 @@ int main(int argc, char *argv[])
 {
 
   //error if # of cmd line arguments != 3
-  // shoudl be file path, quantum_length, program name?
   if (argc != 3)
   {
     return EINVAL;
   }
 
-  //initializes process:data and size using arg[1]
   struct process *data;
   u32 size;
-  //argv[1] is the text file, data hold info
   init_processes(argv[1], &data, &size);
 
-  //takes in quantum_length (arg[2]) specified by user during running
   u32 quantum_length = next_int_from_c_str(argv[2]);
-
-  //list with nothing in it/ have to add processes to it
 
   //#structure tthat connects elements in the queue
   //TAILQ_ENTRY(process) pointers;
   //#process list is structure to be defined and process is elements to be linked
   //TAILQ_HEAD(process_list, process);
 
-  //list with nothing in it/ have to add processes to it
   struct process_list list;
   TAILQ_INIT(&list);
 
-  //initializes waiting and response time
   u32 total_waiting_time = 0;
   u32 total_response_time = 0;
-
+  
   if (quantum_length == 0)
   {
     //???
@@ -244,52 +228,46 @@ int main(int argc, char *argv[])
   }
   u32 total_time = 0;
   u32 current_quantum_length_time = quantum_length;
+  u32 finish_counter = 0;
+  bool finished = false;
 
-  //find max arrival for while loop
-  u32 max_arrival_time = 0;
-  for (int i = 0; i < size; ++i) {
-    if (data[i].arrival_time > max_arrival_time)
-    {
-      max_arrival_time = data[i].arrival_time;
-    }
-  }
-  //i think only 1 of these need to be true
-  //if there are processes OR if the total time < max_arrival_time, continue
-  //if there are no processes AND total time >= max_arrival_time, we are done
-  while (!TAILQ_EMPTY(&list) || total_time < max_arrival_time) {
+  while (!finished) {
+
 
     //inserts processes into queue
     for (u32 i = 0; i < size; ++i) {
-      //only at each arrival_time once
-      //make advice: -> to '.'
       if (data[i].arrival_time == total_time)
       {
         struct process* newProcess = (struct process*)malloc(sizeof(struct process));
-        //gpt advice
-        *newProcess = data[i]; //copy the process data
+        *newProcess = data[i];
         TAILQ_INSERT_TAIL(&list, newProcess, pointers);
       }
     }
-    
-    //processes expired process
+
+
+    // printf("=======================\n");
+    // printf("head pointer ID: %u\n", TAILQ_FIRST(&list)->pid);
+    // printf("remaining time: %u\n", TAILQ_FIRST(&list)-> temp_burst_time);
+
+
+    //processes expired process and resets current_quantum_length_time to quantum length
     if (!TAILQ_EMPTY(&list))
     {
-      if (TAILQ_FIRST(&list)->burst_time == 0)
+      if (TAILQ_FIRST(&list)->temp_burst_time == 0)
       {
-        //gpt advice
         struct process *currentProcess = TAILQ_FIRST(&list);
-        //currentProcess = TAILQ_FIRST(&list);
         TAILQ_REMOVE(&list, currentProcess, pointers);
         free(currentProcess);
+        finish_counter++;
+        current_quantum_length_time = quantum_length;
       }
     }
+
+
     //processes expired quantum length and puts head at tail
     if (current_quantum_length_time == 0)
     {
-      //resets quantum length
       current_quantum_length_time = quantum_length;
-
-      //head to tail
       if (!TAILQ_EMPTY(&list))
       {
         struct process *head = TAILQ_FIRST(&list);
@@ -298,13 +276,11 @@ int main(int argc, char *argv[])
       }
     }
 
+
     //processes head_burst
     if ((!TAILQ_EMPTY(&list)))
     {
-      //gpt advice
       struct process *currentProcess = TAILQ_FIRST(&list);
-      //currentProcess = TAILQ_FIRST(&list)
-      //if false
       if (!(currentProcess->started))
       {
         //calculates total response time
@@ -313,6 +289,7 @@ int main(int argc, char *argv[])
       }
       currentProcess->temp_burst_time -= 1;
     }
+
 
     //adds up waiting time for every process in queue, but not active
     if ((!TAILQ_EMPTY(&list)))
@@ -325,13 +302,46 @@ int main(int argc, char *argv[])
         }
       }
     }
+    
 
     //after processing, increment to time after processing
     total_time += 1;
     current_quantum_length_time -= 1;
+
+    // printf("=======================\n");
+    // printf("head pointer ID: %u\n", TAILQ_FIRST(&list)->pid);
+    // printf("remaining time: %u\n", TAILQ_FIRST(&list)-> temp_burst_time);
+    // printf("Waiting Time Accumulated: %u\n", total_waiting_time);
+    // printf("Seconds Completed: %u\n", total_time);
+
+    //determines if finished
+    
+    if (finish_counter == size)
+    {
+      // printf("Stops Running: no more processes\n\n");
+      finished = true;
+    }
+    // u32 counter = 0;
+  //   for (u32 i = 0; i < size; ++i) {
+  //     printf("hello hi\n");
+  //     if (data[i].temp_burst_time == 0)
+  //     {
+  //       printf("hello \n");
+  //       counter++;
+  //     }
+  //   }
+  //   printf("finish counter value: %u\n", counter);
+  //   printf("size value: %u\n", size);
+
+  //   if (counter == size)
+  //   {
+  //     printf("mhelo11 \n");
+
+  //     finished = true;
+  //   }
   }
 
-
+  
   //total waiting time is time not being contacted
   printf("Average waiting time: %.2f\n", (float)total_waiting_time / (float)size);
 
